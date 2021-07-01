@@ -4,3 +4,96 @@ date: "6/26/2021"
 output: html_document
 ---
 
+# N stable isotope probing
+
+Consider a case of a population that is exposed to an isotopically enriched tracer (in our case, this is a $^{15}N $ Nitrogen source). The $^{15}N$ composition of newly enriched biomass will have a distinct isotope composition that reflects tracer addition -- $^{15}F_{B_{new}}$. We can use mass balance between the newly produced and original biomass to determine the overall isotopic composition of biomass at time t:
+
+$$
+^{15}F_B (t) = \frac{B_{new}}{B} \cdot \space ^{15}{B_{new}} + \frac{B_{original}}{B} \cdot \space ^{15}F_{B_{original}}
+$$
+The terms containing $B_{new}$ and $B_{original}$ represent the mass fractions of new and original biomass, respectively.
+
+
+In the (simplified) case where new biomass mirrors the isotopic composition of the tracer solution (labeled N), we can assume that $^{15}F_{B_{new}} = ^{15}F_{w_{spiked}}$, where $^{15}F_{w_{spiked}}$ is the fractional abundance of $^{15}N$ in the tracer solution.
+
+To calculate apparent turnover time:
+
+$$
+F_T = a \cdot F_L \left(1-e^{-\mu\cdot t}\right) + F_{0} \cdot e^{-\mu \cdot t} \\
+\downarrow \\
+solve \space for \space \mu \\
+\downarrow \\
+\mu = \frac{1}{t} \cdot \ln\frac{(F_T - a*F_L)}{(F_0 - a*F_L)}
+$$
+# Load Libraries
+
+```{r}
+library(tidyverse)
+library(readxl)
+```
+
+# Import Data and Constants
+
+```{r}
+iso_data <- read_csv("")
+a = 1 # EDIT: assimilation efficiency
+f_l =  99.99 # EDIT: Labeling strength as 15N frac abundance
+t_d = 4 # labeling time in days 
+nat_abund = 0 # EDIT: Natural abundance of target isotope
+```
+
+# FT calculations
+
+$$
+N_t = N_0 \cdot e^{µt} \\
+\downarrow \\
+\frac{ln(2)}{µ} = t
+$$
+
+
+Define a function gencalc that calculates growth rate based on assimilation efficiency (a), tracer strength (f_t), initial isotopic enrichment (f_0), label strength (f_l), and incubation time in days (t_d). Returns a growth rate in days.
+```{r}
+gencalc <- function(a, f_t, f_0, f_l, t) {
+  case_when(
+    t == 0 ~ NA_real_,
+    TRUE ~ - (1/t)*(log((FT - a*FL)/(F0 - a*FL)))
+  )
+}
+```
+
+```{r}
+iso_data %>% mutate(
+  d_ft = f_t - nat_abund, # isotopic enrichment relative to natural abundance (background)
+  u_d = gencalc(a = a, f_t = d_ft, f_0 = nat_abund, FL = FL, t = t_d), # growth rate in days
+  gen_d = log(2) / u_d # generation time in days
+  
+)
+```
+
+# Plot
+Plot.
+
+```{r}
+iso_data %>% ggplot(aes(x = condition, y = gen_d)) +
+  geom_bar(aes(fill = bacterium), stat = "identity") +
+  coord_flip() +
+  scale_fill_viridis_d() +
+  ylab("Generation time (Days)") +
+  theme_classic()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
