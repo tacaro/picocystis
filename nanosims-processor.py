@@ -31,9 +31,8 @@ parser.add_argument('--rough', action='store_true',
                     help='Only rough plot, then exit')
 parser.add_argument('-r', '--roi', metavar='PATH', default='rois.png',
                     help='Path to find manually drawn ROI file (mask) [default: rois.png]')
-parser.add_argument('-m', '--res_mult', metavar='PATH', type=float, default=1.65,
-                    help='ROI png sometimes gets read in at different dpi than it was saved, \
-                    multiplier fixy [default: 1]')
+parser.add_argument('-w', '--whole_image', action='store_true',
+                    help='no ROI, full image')
 parser.add_argument('-c', '--compare1', metavar='STRING', default='15N 12C',
                     help='Focal element or trolley to be the numerator [default: "15N 12C"]')
 parser.add_argument('-C', '--compare2', metavar='STRING', default='14N 12C',
@@ -41,7 +40,6 @@ parser.add_argument('-C', '--compare2', metavar='STRING', default='14N 12C',
                     [default: "14N 12C"]')
 
 args = parser.parse_args()
-
 
 def apply_filter(img, filt_method, sigma):
     if filt_method == 'gaussian':
@@ -76,7 +74,7 @@ def save_plot(img):
             plt.imsave(fname=re.sub(".im$","", args.input) + "_f" + str(frame) + "_" + specie + ".png",
                        arr=aligned_image.loc[specie, frame], cmap='gray')
 
-def get_image_from_raw_rois(roi, im, mult=args.res_mult):
+def get_image_from_raw_rois(roi, im):
 
     if roi.shape[0:2] == im.data.shape[2:4]:
         print("The ROI png has the same pixel dimension as the image, great! [no ROI cropping]")
@@ -144,7 +142,7 @@ try:
 
     # image is in center?
     # hack becasue DPI is different between saved png and imported roi
-    rois = get_image_from_raw_rois(roi=rois, im=aligned_image, mult=args.res_mult)
+    rois = get_image_from_raw_rois(roi=rois, im=aligned_image)
 
     # set up blank annotated image to be drawn upon
     annotated_image = np.zeros(rois.shape[0:2])
@@ -170,6 +168,21 @@ try:
         # calculate ratio of desired vs (desired + ref)
         comp1 = aligned_image.loc[args.compare1, frame, :, :]
         comp2 = aligned_image.loc[args.compare2, frame, :, :]
+
+        if args.whole_image:
+            ratio_image = comp1/(comp1 + comp2)
+            ratio_image = np.nan_to_num(ratio_image)
+            plt.imshow(ratio_image)
+            plt.axis('off')
+            cbar = plt.colorbar()
+            cbar.set_label("Fraction (per ROI)")
+            plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
+                      sims.utils.format_species(args.compare2) + ")")
+            plt.savefig(fname=re.sub(".im$","", args.input) + "_whole_f" + str(frame) +
+                              "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
+            plt.show()
+            continue
+
 
         annotated_image, stats_table = parse_ROIs(objects=red_objects, grp_col='red', c1=comp1, c2=comp2,
                                                   annotated_im=annotated_image, stats=stats_table)
