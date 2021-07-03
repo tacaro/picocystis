@@ -29,7 +29,7 @@ parser.add_argument('-s', '--sigma', metavar='FLOAT', type=float, default=1.0,
                     help='Parameter for filtration (sigma for gaussian, size for median) [default: 1.0]')
 parser.add_argument('--rough', action='store_true',
                     help='Only rough plot, then exit')
-parser.add_argument('-r', '--roi', metavar='PATH', default='rois.png',
+parser.add_argument('-r', '--roi', metavar='PATH', default=None,
                     help='Path to find manually drawn ROI file (mask) [default: rois.png]')
 parser.add_argument('-w', '--whole_image', action='store_true',
                     help='no ROI, full image')
@@ -45,7 +45,7 @@ def apply_filter(img, filt_method, sigma):
     if filt_method == 'gaussian':
         for frame in img.frame.values:
             for specie in img.species.values:
-                img.loc[specie, frame,:,:] = ndimage.gaussian_filter(img.loc[specie, frame].data, sigma=sigma)
+                img.loc[specie, frame,: ,:] = ndimage.gaussian_filter(img.loc[specie, frame].data, sigma=sigma)
         return img
     if filt_method == 'median':
         for frame in img.frame.values:
@@ -105,18 +105,27 @@ def get_image_from_raw_rois(roi, im):
 
     return roi
 
-def parse_ROIs(objects, grp_col, c1, c2, annotated_im, stats):
+def parse_ROIs(objects, grp_col, c1, c2, annotated_im, im, stats):
     for obj in range(objects[1]):
         obj_x, obj_y = np.where(objects[0] == (obj + 1))
 
-        counts1 = c1[obj_x, obj_y].sum()
-        counts2 = c2[obj_x, obj_y].sum()
+        pts = np.where(objects[0] == (obj + 1))
+        pts = np.reshape(pts, (2, len(pts[0])))
+        pts = [pts[:, x] for x in range(pts.shape[1])]
+
+        counts1 = sum([c1.data[x, y] for x, y in pts])
+        counts2 = sum([c2.data[x, y] for x, y in pts])
+
+        all_counts = [x for x in np.array([im.data[:, x, y] for x, y in pts]).sum(axis=0)]
 
         rat_im = counts1/(counts1 + counts2)
-
         annotated_im[obj_x, obj_y] = rat_im
 
-        stats.append([grp_col, obj, np.array2string(rat_im.values)])
+        obj_stats = [grp_col, obj]
+        obj_stats.extend(all_counts)
+        obj_stats.append(rat_im)
+
+        stats.append(obj_stats)
 
         return annotated_im, stats
 
@@ -163,41 +172,53 @@ try:
     num_objects = red_objects[1] + green_objects[1] + blue_objects[1]
 
     stats_table = list()
-
-    for frame in range(aligned_image.data.shape[1]):
-        # calculate ratio of desired vs (desired + ref)
-        comp1 = aligned_image.loc[args.compare1, frame, :, :]
-        comp2 = aligned_image.loc[args.compare2, frame, :, :]
-
-        if args.whole_image:
-            ratio_image = comp1/(comp1 + comp2)
-            ratio_image = np.nan_to_num(ratio_image)
-            plt.imshow(ratio_image)
-            plt.axis('off')
-            cbar = plt.colorbar()
-            cbar.set_label("Fraction (per ROI)")
-            plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
-                      sims.utils.format_species(args.compare2) + ")")
-            plt.savefig(fname=re.sub(".im$","", args.input) + "_whole_f" + str(frame) +
-                              "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
-            plt.show()
-            continue
+except OSError:
+    if not args.whole_image:
+        print('No ROI, saving files for you so you can draw them pls pls ^_^')
+        save_plot(aligned_image)
 
 
+for frame in range(aligned_image.data.shape[1]):
+    # calculate ratio of desired vs (desired + ref)
+    comp1 = aligned_image.loc[args.compare1, frame, :, :]
+    comp2 = aligned_image.loc[args.compare2, frame, :, :]
+
+    if args.whole_image:
+        ratio_image = comp1/(comp1 + comp2)
+        ratio_image = np.nan_to_num(ratio_image)
+        plt.imshow(ratio_image)
+        plt.axis('off')
+        cbar = plt.colorbar()
+        cbar.set_label("Fraction (per ROI)")
+        plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
+                  sims.utils.format_species(args.compare2) + ")")
+        plt.savefig(fname=re.sub(".im$","", args.input) + "_whole_f" + str(frame) +
+                          "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
+        plt.show()
+
+    if args.roi:
         annotated_image, stats_table = parse_ROIs(objects=red_objects, grp_col='red', c1=comp1, c2=comp2,
+                                                  im=aligned_image.loc[:, frame, :, :],
                                                   annotated_im=annotated_image, stats=stats_table)
         try:
             annotated_image, stats_table = parse_ROIs(objects=green_objects, grp_col='green', c1=comp1, c2=comp2,
+                                                      im=aligned_image.loc[:, frame, :, :],
                                                       annotated_im=annotated_image, stats=stats_table)
         except TypeError:
             print("No green, continuing")
         try:
             annotated_image, stats_table = parse_ROIs(objects=blue_objects, grp_col='blue', c1=comp1, c2=comp2,
+                                                      im=aligned_image.loc[:, frame, :, :],
                                                       annotated_im=annotated_image, stats=stats_table)
         except TypeError:
             print("No blue huh?")
 
-        stats_table = pd.DataFrame(stats_table, columns=["Group", "ROI", "ratio"])
+
+        stats_columns = ["Group", "ROI"]
+        stats_columns.extend(aligned_image.species.values)
+        stats_columns.append("Ratio_" + args.compare1 + "x" + args.compare2)
+        stats_columns = [re.sub(" ","_", x) for x in stats_columns]
+        stats_table = pd.DataFrame(stats_table, columns=stats_columns)
 
         stats_table.to_csv(re.sub(".im$","", args.input) + "_f0" +
                            "_ratio" + re.sub(" ", "_", args.compare1) +"-x-" + re.sub(" ", "_", args.compare2) +
@@ -211,11 +232,8 @@ try:
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
                   sims.utils.format_species(args.compare2) + ")")
         plt.savefig(fname=re.sub(".im$","", args.input) + "_f" + str(frame) +
-                          "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
+                          "_ratio" + re.sub(" ", "_", args.compare1) +"-x-"+ re.sub(" ", "_", args.compare2) + ".png")
         plt.show()
 
 
-except FileNotFoundError:
-    print('No ROI, saving files for you so you can draw them pls pls ^_^')
-    save_plot(aligned_image)
 
