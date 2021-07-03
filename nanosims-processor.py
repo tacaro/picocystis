@@ -129,8 +129,7 @@ def parse_ROIs(objects, grp_col, c1, c2, annotated_im, im, stats):
 
         stats.append(obj_stats)
 
-        return annotated_im, stats
-
+    return annotated_im, stats
 
 
 image = sims.SIMS(args.input)
