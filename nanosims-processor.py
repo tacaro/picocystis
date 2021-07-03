@@ -38,6 +38,8 @@ parser.add_argument('-c', '--compare1', metavar='STRING', default='15N 12C',
 parser.add_argument('-C', '--compare2', metavar='STRING', default='14N 12C',
                     help='Comparand element or trolley to be summed with --compare1 for denominator \
                     [default: "14N 12C"]')
+parser.add_argument('-o', '--output', default=None, metavar='PATH',
+                    help='Optional output folder for contrasts')
 
 args = parser.parse_args()
 
@@ -130,6 +132,7 @@ def parse_ROIs(objects, grp_col, c1, c2, annotated_im, im, stats):
         return annotated_im, stats
 
 
+
 image = sims.SIMS(args.input)
 aligned_image, shifts = sims.utils.align(image)
 
@@ -192,7 +195,7 @@ for frame in range(aligned_image.data.shape[1]):
         cbar.set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
                   sims.utils.format_species(args.compare2) + ")")
-        plt.savefig(fname=re.sub(".im$","", args.input) + "_whole_f" + str(frame) +
+        plt.savefig(fname=args.output + "_whole_f" + str(frame) +
                           "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
         plt.show()
 
@@ -220,7 +223,7 @@ for frame in range(aligned_image.data.shape[1]):
         stats_columns = [re.sub(" ","_", x) for x in stats_columns]
         stats_table = pd.DataFrame(stats_table, columns=stats_columns)
 
-        stats_table.to_csv(re.sub(".im$","", args.input) + "_f0" +
+        stats_table.to_csv(args.output + "_f0" +
                            "_ratio" + re.sub(" ", "_", args.compare1) +"-x-" + re.sub(" ", "_", args.compare2) +
                            ".tsv", sep="\t", index=False)
 
@@ -231,9 +234,6 @@ for frame in range(aligned_image.data.shape[1]):
         cbar.set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
                   sims.utils.format_species(args.compare2) + ")")
-        plt.savefig(fname=re.sub(".im$","", args.input) + "_f" + str(frame) +
+        plt.savefig(fname=args.output + "_f" + str(frame) +
                           "_ratio" + re.sub(" ", "_", args.compare1) +"-x-"+ re.sub(" ", "_", args.compare2) + ".png")
-        plt.show()
-
-
-
+        #plt.show()
