@@ -1,0 +1,64 @@
+---
+title: "ROI_data"
+author: "Tristan Caro"
+date: "7/3/2021"
+output: html_document
+---
+
+# Collecting ROI Data
+
+ROI data has been collected into a folder `June_2021/roi_data`
+
+```{r}
+# Load Libraries
+library(tidyverse)
+library(readxl)
+library(ggsci)
+
+```
+
+```{r, echo=FALSE}
+temp_list = list.files(path = "June_2021/roi_data", pattern="*.tsv")
+#roi_data = lapply(paste0("June_2021/roi_data/", temp), read_tsv)
+
+# Create an empty tibble with pre-defined colnames
+# I wish I knew a better way to create an empty tibble but this will have to do
+tbl_colnames <- c("N_source", "light", "inc_time_hr", "ROI", "12C", "13C", "14N_12C", "15N_12C", "31P", "32S", "34S", "SE", "Ratio_15N_12Cx14N_12C" )
+roi_tbl <- tibble(
+)
+roi_tbl <- roi_tbl[-1,] # Remove the garbage row of the tibble
+
+# Read in each .tsv, append each to the roi_tbl we just generated
+for (tsv in temp_list) {
+  tmp_df <- read_tsv(paste0("June_2021/roi_data/", tsv))
+  tmp_df <- tmp_df %>% mutate(filename = tsv)
+  roi_tbl <- bind_rows(roi_tbl, tmp_df)
+}
+```
+
+```{r}
+# Parse filenames to generate conditions
+roi_tbl <- roi_tbl %>% mutate(
+  N_source = case_when(
+    str_detect(filename, "NH4") ~ "NH4",
+    str_detect(filename, "no3") ~ "no3",
+    str_detect(filename, "TMA") ~ "TMA",
+    str_detect(filename, "gly") ~ "gly"),
+  light = case_when(
+    str_detect(filename, "light") ~ TRUE,
+    str_detect(filename, "dark") ~ FALSE),
+  incubation_time_hr = 96
+)
+```
+
+
+# Plot!
+```{r}
+p_roi_tbl <- roi_tbl %>% ggplot(aes(x = N_source, y=Ratio_15N_12Cx14N_12C, color = light)) +
+  geom_boxplot() +
+  #geom_point(position=position_jitterdodge(), size = 0.5) +
+  scale_color_aaas() +
+  theme_classic()
+ggsave(plot = p_roi_tbl, filename = "p_roi_tbl.png")
+```
+
