@@ -13,13 +13,13 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-
 parser = argparse.ArgumentParser(description='nanosims processing port')
 
 parser.add_argument('-i', '--input', metavar='PATH',
                     default='GB21_L2_NH4_light_chain1_1.im',
-                    dest='input',
-                    help='File for input (a .im file)')
+                    dest='input', help='File for input (a .im file)')
+parser.add_argument('-o', '--output', metavar='PATH',
+                    default=None, help='Prefix for output [default: --input without the .im ending]')
 parser.add_argument('-f', '--frame', metavar='INT', type=int, default=None,
                     help='Frame index (e.g., "0" would be the first frame" to focus, \
                     default behavior is to loop through all [default: None]')
@@ -38,8 +38,6 @@ parser.add_argument('-c', '--compare1', metavar='STRING', default='15N 12C',
 parser.add_argument('-C', '--compare2', metavar='STRING', default='14N 12C',
                     help='Comparand element or trolley to be summed with --compare1 for denominator \
                     [default: "14N 12C"]')
-parser.add_argument('-o', '--output', default=None, metavar='PATH',
-                    help='Optional output folder for contrasts')
 
 args = parser.parse_args()
 
@@ -73,7 +71,7 @@ def save_plot(img):
             plt.axis('off')
             plt.colorbar()
             plt.title(specie)
-            plt.imsave(fname=re.sub(".im$","", args.input) + "_f" + str(frame) + "_" + specie + ".png",
+            plt.imsave(fname=args.output + "_f" + str(frame) + "_" + specie + ".png",
                        arr=aligned_image.loc[specie, frame], cmap='gray')
 
 def get_image_from_raw_rois(roi, im):
@@ -128,7 +126,6 @@ def parse_ROIs(objects, grp_col, c1, c2, annotated_im, im, stats):
         obj_stats.append(rat_im)
 
         stats.append(obj_stats)
-
     return annotated_im, stats
 
 
@@ -143,6 +140,9 @@ if args.frame:
 
 if args.filter_method:
     aligned_image = apply_filter(img=aligned_image, filt_method=args.filter_method, sigma=1)
+
+if args.output is None:
+    args.output = re.sub(".im", "", args.input)
 
 if args.rough:
     rough_plot(aligned_image)
@@ -235,4 +235,7 @@ for frame in range(aligned_image.data.shape[1]):
                   sims.utils.format_species(args.compare2) + ")")
         plt.savefig(fname=args.output + "_f" + str(frame) +
                           "_ratio" + re.sub(" ", "_", args.compare1) +"-x-"+ re.sub(" ", "_", args.compare2) + ".png")
-        #plt.show()
+        plt.show()
+
+
+
