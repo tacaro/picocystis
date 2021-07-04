@@ -14,7 +14,7 @@ ROI data has been collected into a folder `June_2021/roi_data`
 library(tidyverse)
 library(readxl)
 library(ggsci)
-
+library(ggdist)
 ```
 
 ```{r, echo=FALSE}
@@ -45,20 +45,32 @@ roi_tbl <- roi_tbl %>% mutate(
     str_detect(filename, "TMA") ~ "TMA",
     str_detect(filename, "gly") ~ "gly"),
   light = case_when(
-    str_detect(filename, "light") ~ TRUE,
-    str_detect(filename, "dark") ~ FALSE),
-  incubation_time_hr = 96
+    str_detect(filename, "light") ~ "light",
+    str_detect(filename, "dark") ~ "dark"),
+  incubation_time_hr = 96,
+  cell_type = case_when(
+    Group == "red" ~ "Picocystis",
+    Group == "green" ~ "Picocystis triplet",
+    Group == "blue" ~ "Other"
+  )
 )
 ```
 
 
 # Plot!
 ```{r}
-p_roi_tbl <- roi_tbl %>% ggplot(aes(x = N_source, y=Ratio_15N_12Cx14N_12C, color = light)) +
+p_roi_tbl_1 <- roi_tbl %>% ggplot(aes(x = N_source, y=Ratio_15N_12Cx14N_12C, color = cell_type)) +
   geom_boxplot() +
   #geom_point(position=position_jitterdodge(), size = 0.5) +
   scale_color_aaas() +
+  facet_wrap(vars(light)) +
   theme_classic()
-ggsave(plot = p_roi_tbl, filename = "p_roi_tbl.png")
+ggsave(plot = p_roi_tbl_1, filename = "p_roi_tbl.png")
+p_roi_tbl_1
+
+```
+
+```{r}
+# Raincloud plotting
 ```
 
