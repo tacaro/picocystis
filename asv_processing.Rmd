@@ -1,0 +1,35 @@
+---
+title: "asv_processing"
+author: "Tristan Caro"
+date: "7/5/2021"
+output: html_document
+---
+
+```{r}
+library(phyloseq)
+library(vegan)
+library(DESeq2)
+library(dendextend)
+library(tidyr)
+library(viridis)
+library(reshape2)
+counts_tab <- read.csv("ASVs_counts.tsv",header=T, row.names=1,check.names=F, sep="\t")[ , -c(1:4)]
+relative_tab <- apply(counts_tab, 2, function(x) 100*(x/sum(x)))
+tax_tab <- read.csv("ASVs_taxonomy.tsv", header=T, row.names=1, check.names=F, sep="\t")
+tax_tab$ASV <- rownames(tax_tab)
+sample_info_tab <- data.frame(year=gsub(".*-[0-9][0-9]([0-9][0-9])-.*$","\\1", colnames(counts_tab)), 
+                              depth=gsub("MLW-[0-9][0-9][0-9][0-9]*-(.*$)","\\1", colnames(counts_tab)),
+                              row.names = colnames(counts_tab))
+dans_colors_master <- c("#FF0000","#F6A300","#0068CC","#6600AA","#AC0088","#AA33FF","#00FFFF","#00CC00","#006611","#00AC99",
+				 "#AC6844","#FFFF00","#991100","#ACAC11","#a0f0aa","#FF00FF","#FF8611","#B9F6F6","#001166","#AC9A00","#994141","#ff1169",
+				 "#0AF622","#119924","#Ac3311","#004A9A","#AcAc99","turquoise","tomato","sienna1","rosybrown","peachpuff",
+				 "olivedrab3","mistyrose1","mediumorchid","indianred2","#114914","#660011","ivory3","deeppink","#331111")
+year_colors <- setNames(dans_colors_master[1:length(unique(sample_info_tab$year))], unique(sample_info_tab$year))
+
+
+deseq_counts <- DESeqDataSetFromMatrix(counts_tab, sample_info_tab, design = ~year)
+deseq_counts <- estimateSizeFactors(deseq_counts, type = "poscounts")
+deseq_counts_vst <- varianceStabilizingTransformation(deseq_counts)
+vst_trans_count_tab <- assay(deseq_counts_vst)
+```
+
