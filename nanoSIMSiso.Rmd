@@ -25,25 +25,6 @@ solve \space for \space \mu \\
 \downarrow \\
 \mu = \frac{1}{t} \cdot \ln\frac{(F_T - a*F_L)}{(F_0 - a*F_L)}
 $$
-# Load Libraries
-
-```{r}
-library(tidyverse)
-library(readxl)
-```
-
-# Import Data and Constants
-
-```{r}
-iso_data <- read_csv("")
-a = 1 # EDIT: assimilation efficiency
-f_l =  99.99 # EDIT: Labeling strength as 15N frac abundance
-t_d = 4 # labeling time in days 
-nat_abund = 0 # EDIT: Natural abundance of target isotope
-```
-
-# FT calculations
-
 $$
 N_t = N_0 \cdot e^{µt} \\
 \downarrow \\
@@ -51,34 +32,85 @@ N_t = N_0 \cdot e^{µt} \\
 $$
 
 
+# Load Libraries
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(ggsci)
+library(ggdist)
+library(latex2exp)
+```
+
+# Import Data and Set Constants
+
+```{r, message=FALSE}
+roi_tbl <- read_tsv("roi_tbl.tsv")
+a = 0.5 # EDIT: assimilation efficiency
+f_l =  1 # EDIT: Labeling strength as 15N frac abundance
+t_d = 4 # labeling time in days
+nat_abund_15N = .00364 # EDIT: Natural abundance of target isotope 15N frac abundance
+f_0 = .00364 # EDIT: Initial Isotopic enrichment 15N frac abundance
+```
+
+# FT calculations
+
 Define a function gencalc that calculates growth rate based on assimilation efficiency (a), tracer strength (f_t), initial isotopic enrichment (f_0), label strength (f_l), and incubation time in days (t_d). Returns a growth rate in days.
 ```{r}
-gencalc <- function(a, f_t, f_0, f_l, t) {
+gencalc <- function(a, f_t, f_0, f_l, t_d) {
   case_when(
-    t == 0 ~ NA_real_,
-    TRUE ~ - (1/t)*(log((FT - a*FL)/(F0 - a*FL)))
+    t_d == 0 ~ NA_real_,
+    TRUE ~ - (1/t_d) * (log((f_t - a*f_l)/(f_0 - a*f_l)))
   )
 }
 ```
 
 ```{r}
-iso_data %>% mutate(
-  d_ft = f_t - nat_abund, # isotopic enrichment relative to natural abundance (background)
-  u_d = gencalc(a = a, f_t = d_ft, f_0 = nat_abund, FL = FL, t = t_d), # growth rate in days
-  gen_d = log(2) / u_d # generation time in days
-  
+# Calcilate Generation Times
+roi_tbl <- roi_tbl %>% mutate(
+  mu_d = gencalc(a, Ratio_15N_12Cx14N_12C, f_0, f_l, t_d),
+  gen_d = log(2) / mu_d,
 )
+
+# Replace negative values with zeros
+# If a cell is below natural abundance it will have a "negative" growth rate!
+roi_tbl$mu_d[roi_tbl$mu_d < 0] <- 0
+roi_tbl$gen_d[roi_tbl$gen_d < 0] <- 0
+
+write_tsv(roi_tbl, "roi_tbl_gentimes.tsv")
 ```
 
+
 # Plot
-Plot.
 
 ```{r}
-iso_data %>% ggplot(aes(x = condition, y = gen_d)) +
-  geom_bar(aes(fill = bacterium), stat = "identity") +
-  coord_flip() +
-  scale_fill_viridis_d() +
-  ylab("Generation time (Days)") +
+p_turnover_nh4 <- roi_tbl %>% filter(N_source == "NH4") %>% 
+  ggplot(aes(x = N_source, y = gen_d, color = cell_type)) +
+  geom_boxplot(outlier.shape = NA) +
+   geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
+  facet_wrap(vars(light), scales="free_y") +
+  ylab(TeX("Cell Turnover $d^{-1}$")) +
+  xlab("") +
+  ggtitle("Cell gen time supplied with Ammonium") +
+  scale_color_aaas() +
+  coord_cartesian(ylim =c(0, 15)) +
+  theme_classic()
+p_turnover_nh4
+
+roi_tbl %>% filter(N_source == "NH4") %>% filter(light == "light") %>% filter(gen_d < 15) 
+```
+
+```{r}
+roi_tbl %>%
+  filter(!is.na(gen_d)) %>% 
+  filter(N_source %in% c("no3", "NH4")) %>% 
+  ggplot(aes(x = N_source, y = mu_d, color = cell_type)) + 
+  #facet_wrap(vars(N_source, light), scale = "free_x") +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
+  facet_wrap(vars(light, N_source), scales = "free") +
+  ylab(TeX("Cell Turnover $d^{-1}$")) +
+  scale_color_aaas() +
   theme_classic()
 ```
 
@@ -86,9 +118,26 @@ iso_data %>% ggplot(aes(x = condition, y = gen_d)) +
 
 
 
+```{r}
+roi_tbl %>% filter(cell_type_other == "Picocystis") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  stat_halfeye()
+```
 
 
 
+```{r}
+
+med_mu <- roi_tbl %>% filter(
+  N_source == "NH4",
+  light == "light",
+  cell_type_other == "Picocystis"
+)
+median(med_mu$Ratio_15N_12Cx14N_12C)
+t = - log((0.03154381 - a*f_l)/ (f_0-a*f_l)) / 0.3872494
+
+
+```
 
 
 
