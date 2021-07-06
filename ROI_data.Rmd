@@ -52,8 +52,13 @@ roi_tbl <- roi_tbl %>% mutate(
   cell_type = case_when(
     Group == "red" ~ "Picocystis",
     Group == "green" ~ "Picocystis triplet",
-    Group == "blue" ~ "Other"
+    Group == "blue" ~ "Other"),
+  cell_type_other = case_when(
+    cell_type == "Picocystis" ~ "Picocystis",
+    cell_type == "Picocystis triplet" ~ "Picocystis",
+    cell_type == "Other" ~ "Other"
   )
+  
 )
 ```
 
@@ -84,6 +89,8 @@ p_roi_tbl_1_dark <- roi_tbl %>%
   geom_hline(yintercept = .00364, color = "red") +
   theme_classic()
 p_roi_tbl_1_dark
+
+
 ```
 
 ```{r}
