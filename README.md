@@ -1,4 +1,4 @@
-# picocystis
+# GB21 picocystis
 
 ## Directory
 - `ROI_data.Rmd`: Processing and plotting nanoSIMS 15N data
