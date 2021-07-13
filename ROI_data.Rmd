@@ -15,6 +15,7 @@ library(tidyverse)
 library(readxl)
 library(ggsci)
 library(ggdist)
+library(plotly)
 ```
 
 ```{r, echo=FALSE, message=FALSE}
@@ -44,7 +45,8 @@ roi_tbl <- roi_tbl %>% mutate(
     str_detect(filename, regex('no3', ignore_case = TRUE)) ~ "no3",
     str_detect(filename, regex('TMA', ignore_case = TRUE)) ~ "TMA",
     str_detect(filename, regex('gly', ignore_case = TRUE)) ~ "gly",
-    str_detect(filename, regex('CN', ignore_case = TRUE)) ~ "CN"),
+    str_detect(filename, regex('CN', ignore_case = TRUE)) ~ "CN",
+    str_detect(filename, regex('HPG', ignore_case = TRUE)) ~ "HPG"),
   light = case_when(
     str_detect(filename, "light") ~ "light",
     str_detect(filename, "dark") ~ "dark"),
@@ -58,8 +60,8 @@ roi_tbl <- roi_tbl %>% mutate(
     cell_type == "Picocystis triplet" ~ "Picocystis",
     cell_type == "Other" ~ "Other"
   )
-  
 )
+
 ```
 
 ```{r}
@@ -87,19 +89,67 @@ p_roi_tbl_1_dark <- roi_tbl %>%
   geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
   scale_color_aaas() +
   geom_hline(yintercept = .00364, color = "red") +
-  theme_classic()
+  theme_classic() +
+  ggtitle("Dark Conditions") +
+  theme()
 p_roi_tbl_1_dark
+
+p_roi_tbl_1_no_nh4 <- roi_tbl %>% 
+  filter(N_source != "NH4") %>% 
+  ggplot(aes(x = N_source, y = Ratio_15N_12Cx14N_12C, color = cell_type)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
+  scale_color_aaas() +
+  geom_hline(yintercept = .00364, color = "red") +
+  theme_classic() +
+  ggtitle("Dark Conditions") +
+  facet_wrap(vars(light)) +
+  theme_classic() +
+  ggtitle("No NH4")
+p_roi_tbl_1_no_nh4
 
 
 ```
 
 ```{r}
 # Raincloud plotting
-roi_tbl %>% filter(N_source == "NH4") %>% 
-  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = cell_type)) + 
-  stat_slab(alpha = 0.3, height = 0.5) +
-  stat_pointinterval(position = position_dodge(width = .4, preserve = "single")) +
+p_NH4_active_raincloud <- roi_tbl %>% filter(N_source == "NH4", cell_type != "Other") %>% 
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = light)) + 
+  stat_slab(alpha = 0.6, height = 0.5) +
+  geom_point(y = -.20, size = 10, shape = 124, alpha = 0.3) +
+  stat_pointinterval(y = 0, alpha = 0.5) +
+  facet_wrap(vars(light), ncol = 1, strip.position = "right") +
   scale_fill_aaas() +
-  theme_classic()
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+ggsave(p_NH4_active_raincloud, filename = "NH4_active_raincloud.png", height = 3, width = 7)
+  
+```
+
+```{r}
+# Calculate median µ and generation time to manually plot on top of this
+roi_tbl %>% filter(N_source == "NH4") %>% 
+  group_by(light) %>% 
+  summarize(med_mu_d = median(mu_d),
+            med_gen_d = median(gen_d))
+```
+
+```{r}
+p_NH4_active_raincloud <- roi_tbl %>% filter(N_source == "NH4", cell_type != "Other") %>% 
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = light)) + 
+  stat_slab(alpha = 0.6, height = 0.5) +
+  geom_point(y = -.20, size = 10, shape = 124, alpha = 0.3) +
+  stat_pointinterval(y = 0, alpha = 0.5) +
+  facet_wrap(vars(light), ncol = 1, strip.position = "right") +
+  scale_fill_aaas() +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+ggsave(p_NH4_active_raincloud, filename = "NH4_active_raincloud.png", height = 3, width = 7)
 ```
 
