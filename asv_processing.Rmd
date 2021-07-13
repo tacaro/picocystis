@@ -71,8 +71,52 @@ ps <- subset_taxa(ps, !is.na(domain) & !domain %in% c("", "uncharacterized"))
 top25 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:25]
 ps.top25 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
 ps.top25 <- prune_taxa(top25, ps.top25)
+ps_photos <- subset_taxa(ps, class %in% c("Cyanobacteriia", "Incertae Sedis_3"))
+ps_photos_transformed <- transform_sample_counts(ps_photos, function(OTU) OTU/sum(OTU))
+```
+
+```{r}
+relabunds <- apply(ps@otu_table, 2, function(x) 100*(x/sum(x)))
+relabunds <- data.frame(cbind(ps@tax_table, relabunds))
+
+relabund_long <- melt(relabunds, id.vars=1:8, variable.name = 'sample', value.name='relabund')
+relabund_long$relabund <- as.numeric(as.character(relabund_long$relabund))
+relabund_long <- relabund_long %>% mutate(
+  year=gsub(".*.[0-9][0-9]([0-9][0-9])..*$","\\1", sample),
+  month = gsub(".*.([0-9][0-9])[0-9][0-9]..*$","\\1", sample),
+  season = case_when(
+    month %in% c("09", "10") ~ "Fall",
+    TRUE ~ "Spring"
+  )
+)
+
+relabund_sub <- relabund_long[relabund_long$class %in% c("Cyanobacteriia", "Incertae Sedis_3"),]
 
 ```
+
+```{r}
+ggplot(relabund_sub, aes(x=sample, y= relabund, fill=class)) + 
+  geom_col() + 
+  facet_grid(.~year+season, scales = "free_x", space = "free_x") +
+  scale_color_manual(values = dans_colors_master) +
+  theme_minimal()
+```
+
+```{r}
+relabund_sub$season <- factor(relabund_sub$season, levels=rev(sort(unique(as.character(relabund_sub$season)))))
+ggplot(relabund_sub, aes(x=sample, y = relabund, fill=class)) +
+  geom_col() +
+  facet_grid(class~year+season, scales = "free", space = "free_x") +
+  scale_fill_aaas() +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+```
+
+
 
 ```{r}
 plot_bar(ps.top25, fill = "phylum") +
@@ -91,6 +135,19 @@ plot_bar(ps.top25, fill = "phylum") +
 plot_bar(ps.top25, fill = "phylum") +
   facet_grid(above13~year, scale="free_x", space="free_x") +
   scale_fill_manual(values = dans_colors_master)+
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits=c(0, 1)) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.title = element_blank())
+```
+
+```{r}
+
+plot_bar(ps_photos_transformed, fill = "class") +
+  facet_grid(.~year, scale="free_x", space="free_x") +
+  #scale_fill_manual(values = dans_colors_master)+
   theme_classic() +
   scale_y_continuous(expand = c(0,0), limits=c(0, 1)) +
   theme(axis.title.x=element_blank(),
