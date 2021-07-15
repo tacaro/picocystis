@@ -1,0 +1,158 @@
+---
+title: "asv_processing"
+author: "Tristan Caro"
+date: "7/5/2021"
+output: html_document
+---
+
+```{r}
+library(phyloseq)
+library(vegan)
+library(DESeq2)
+library(dendextend)
+library(tidyr)
+library(viridis)
+library(reshape2)
+library(ggsci)
+library(LaCroixColoR)
+library(tidyverse)
+library(magrittr)
+counts_tab <- read.csv("asv_analyzed/ASVs_counts.tsv",header=T, row.names=1,check.names=F, sep="\t")[ , -c(1:4)]
+relative_tab <- apply(counts_tab, 2, function(x) 100*(x/sum(x)))
+tax_tab <- read.csv("asv_analyzed/ASVs_taxonomy.tsv", header=T, row.names=1, check.names=F, sep="\t")
+tax_tab$ASV <- rownames(tax_tab)
+sample_info_tab <- data.frame(year=gsub(".*-[0-9][0-9]([0-9][0-9])-.*$","\\1", colnames(counts_tab)), 
+                              depth=gsub("MLW-[0-9][0-9][0-9][0-9]*-(.*$)","\\1", colnames(counts_tab)),
+                              row.names = colnames(counts_tab))
+above13depths <- c("0-5", "10", "05", "12", "14", "0-5m", "10m", "05-1", "05-2", "05-3", "05-4", "10-1", "10-2", "10-3", "10-4", "5-1", "5-2", "5-3", "00")
+
+sample_info_tab <- sample_info_tab %>% mutate(
+  above13 = case_when(
+    depth %in% above13depths ~ "above 13m",
+    TRUE ~ "below 13m")
+)
+              
+dans_colors_master <- c("#FF0000","#F6A300","#0068CC","#6600AA","#AC0088","#AA33FF","#00FFFF","#00CC00","#006611","#00AC99",
+				 "#AC6844","#FFFF00","#991100","#ACAC11","#a0f0aa","#FF00FF","#FF8611","#B9F6F6","#001166","#AC9A00","#994141","#ff1169",
+				 "#0AF622","#119924","#Ac3311","#004A9A","#AcAc99","turquoise","tomato","sienna1","rosybrown","peachpuff",
+				 "olivedrab3","mistyrose1","mediumorchid","indianred2","#114914","#660011","ivory3","deeppink","#331111")
+year_colors <- setNames(dans_colors_master[1:length(unique(sample_info_tab$year))], unique(sample_info_tab$year))
+
+
+deseq_counts <- DESeqDataSetFromMatrix(counts_tab, sample_info_tab, design = ~year)
+deseq_counts <- estimateSizeFactors(deseq_counts, type = "poscounts")
+deseq_counts_vst <- varianceStabilizingTransformation(deseq_counts)
+vst_trans_count_tab <- assay(deseq_counts_vst)
+```
+
+```{r}
+# Clean counts tab
+counts_tab <- counts_tab[,-c(1,ncol(counts_tab))]
+
+# making our phyloseq object with transformed table
+vst_count_phy <- otu_table(vst_trans_count_tab, taxa_are_rows=T)
+sample_info_tab_phy <- sample_data(sample_info_tab)
+# Clean sample info tab
+sample_info_tab_phy <- sample_info_tab_phy[-c(1,nrow(sample_info_tab_phy)),]
+vst_physeq <- phyloseq(vst_count_phy, sample_info_tab_phy)
+
+  # generating and visualizing the PCoA with phyloseq
+vst_pcoa <- ordinate(vst_physeq, method="MDS", distance="euclidean")
+eigen_vals <- vst_pcoa$values$Eigenvalues # allows us to scale the axes according to their magnitude of separating apart the samples
+
+TAX = tax_table(as.matrix(tax_tab))
+ASV = otu_table(counts_tab, taxa_are_rows=T)
+
+```
+
+```{r}
+ps = phyloseq(ASV, TAX, sample_info_tab_phy)
+ps <- subset_taxa(ps, !is.na(domain) & !domain %in% c("", "uncharacterized"))
+top25 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:25]
+ps.top25 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU))
+ps.top25 <- prune_taxa(top25, ps.top25)
+ps_photos <- subset_taxa(ps, class %in% c("Cyanobacteriia", "Incertae Sedis_3"))
+ps_photos_transformed <- transform_sample_counts(ps_photos, function(OTU) OTU/sum(OTU))
+```
+
+```{r}
+relabunds <- apply(ps@otu_table, 2, function(x) 100*(x/sum(x)))
+relabunds <- data.frame(cbind(ps@tax_table, relabunds))
+
+relabund_long <- melt(relabunds, id.vars=1:8, variable.name = 'sample', value.name='relabund')
+relabund_long$relabund <- as.numeric(as.character(relabund_long$relabund))
+relabund_long <- relabund_long %>% mutate(
+  year=gsub(".*.[0-9][0-9]([0-9][0-9])..*$","\\1", sample),
+  month = gsub(".*.([0-9][0-9])[0-9][0-9]..*$","\\1", sample),
+  season = case_when(
+    month %in% c("09", "10") ~ "Fall",
+    TRUE ~ "Spring"
+  )
+)
+
+relabund_sub <- relabund_long[relabund_long$class %in% c("Cyanobacteriia", "Incertae Sedis_3"),]
+
+```
+
+```{r}
+ggplot(relabund_sub, aes(x=sample, y= relabund, fill=class)) + 
+  geom_col() + 
+  facet_grid(.~year+season, scales = "free_x", space = "free_x") +
+  scale_color_manual(values = dans_colors_master) +
+  theme_minimal()
+```
+
+```{r}
+relabund_sub$season <- factor(relabund_sub$season, levels=rev(sort(unique(as.character(relabund_sub$season)))))
+ggplot(relabund_sub, aes(x=sample, y = relabund, fill=class)) +
+  geom_col() +
+  facet_grid(class~year+season, scales = "free", space = "free_x") +
+  scale_fill_aaas() +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+```
+
+
+
+```{r}
+plot_bar(ps.top25, fill = "phylum") +
+  facet_grid(.~year, scale="free_x", space="free_x") +
+  scale_fill_manual(values = dans_colors_master)+
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits=c(0, 1)) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.title = element_blank())
+```
+
+
+```{r}
+plot_bar(ps.top25, fill = "phylum") +
+  facet_grid(above13~year, scale="free_x", space="free_x") +
+  scale_fill_manual(values = dans_colors_master)+
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits=c(0, 1)) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.title = element_blank())
+```
+
+```{r}
+
+plot_bar(ps_photos_transformed, fill = "class") +
+  facet_grid(.~year, scale="free_x", space="free_x") +
+  #scale_fill_manual(values = dans_colors_master)+
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0), limits=c(0, 1)) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.title = element_blank())
+```
+

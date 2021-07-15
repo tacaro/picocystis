@@ -1,0 +1,90 @@
+---
+title: "checking_nh4_dark"
+author: "Tristan Caro, Shae Silverman, Chris Schuler"
+date: "7/5/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## What about NH4 Dark Condition?
+We observe growth in the NH4 dark condition. Given that our highest growth rates are observed in the NH4 light condition, we should confirm that the growth observed in the dark is *not* an artefact of the experimental setup. In other words, how much time would the "dark" vials need to be erroneously left out in the light for us to observe the growth signature we do?
+
+To get a sense for this problem, we use a model of isotopic incorporation:
+
+$$
+F_T = a \cdot F_L \left(1-e^{-\mu\cdot t}\right) + F_{0} \cdot e^{-\mu \cdot t}
+$$
+Where:
+- $F_T$ is the fractional abundance of the heavy isotope at time t
+- a is the assimilation efficiency (assumed to be 0.5)
+- $F_L$ is the fractional abundance isotopic composition of the label (1)
+- $\mu$ is the aggregate cell turnover rate
+- $F_0$ is the native isotopic composition of biomass (assumed to be natural abundance)
+- $t$ is the duration of incubation
+
+We need to find the *time* `t` required to reach an $F_T$ observed in the $NH_4$ *dark* condition, assuming a growth rate $\mu$ that is identical to the light condition. For this test, we assume that $\mu$ of the dark condition is identical to the light condition because cells from both conditions should grow identically *before* being put in the incubation chamber.
+
+We solve for t:
+$$
+F_T = a \cdot F_L \left(1-e^{-\mu\cdot t}\right) + F_{0} \cdot e^{-\mu \cdot t} \\
+\downarrow \\
+t = \frac{- \frac{(F_T - a \cdot F_L)}{(F_0 - a \cdot F_L)}}{\mu}
+$$
+Parameters:
+- $F_T$ we compute the median isotopic enrichment of cells in the dark $NH_4$ condition (`0.03154381`)
+- $F_0$ we use natural $^{15}N$ abundance `.00364`
+- $a$ we assume to be `0.5`
+- $F_L$ we assume to be `1` (fully labeled)
+
+## Code
+
+```{r, message=FALSE}
+library(tidyverse)
+roi_tbl <- read_tsv("roi_tbl_gentimes.tsv")
+
+a = 0.5 # EDIT: assimilation efficiency
+f_l =  1 # EDIT: Labeling strength as 15N frac abundance
+t_d = 4 # labeling time in days
+nat_abund_15N = .00364 # EDIT: Natural abundance of target isotope 15N frac abundance
+f_0 = .00364 # EDIT: Initial Isotopic enrichment 15N frac abundance
+
+# Find the median NH4 F_T at 96 hour incubation
+nh4_tbl <- roi_tbl %>% filter(
+  N_source == "NH4",
+  light == "dark",
+)
+
+nh4_tbl <- nh4_tbl %>% filter(
+  !is.na(Ratio_15N_12Cx14N_12C)
+)
+
+med_f_t_96 = median(nh4_tbl$Ratio_15N_12Cx14N_12C) # Median F_T
+
+med_mu <- roi_tbl %>% filter(
+  N_source == "NH4",
+  light == "light",
+  cell_type_other == "Picocystis"
+)
+
+med_mu <- med_mu %>% filter(
+  !is.na(mu_d)
+)
+
+med_mu_96 = median(med_mu$mu_d)
+
+median(med_mu$Ratio_15N_12Cx14N_12C)
+# calculate time required to reach F_T of observed dark condition given light condition growth params
+t = - log((med_f_t_96 - a*f_l)/ (f_0-a*f_l)) / med_mu_96
+```
+
+Time in days required:
+```{r}
+t
+```
+Time in hours required:
+```{r}
+t*24
+```
+
+So, it would take 3.7 hours of erroneous time in the light to reach the values we observe in the NH4 dark condition!

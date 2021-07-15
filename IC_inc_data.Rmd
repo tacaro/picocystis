@@ -1,0 +1,50 @@
+---
+title: "IC_inc_data"
+author: "Tristan Caro"
+date: "7/4/2021"
+output: html_document
+---
+
+```{r}
+# Load Libraries
+library(tidyverse)
+library(readxl)
+library(ggsci)
+library(ggdist)
+library(magrittr)
+```
+
+```{r}
+IC_tbl <- read_xlsx("ML_incubation_IC_data_EE.xlsx")
+# Data represented in µM
+
+# Cleanup the .xlsx
+IC_tbl <- IC_tbl %>% na_if("n.a.")
+IC_tbl$Ammonium %<>% as.double()
+IC_tbl$Nitrate %<>% as.double()
+IC_tbl$Formate %<>% as.double()
+IC_tbl$`Time (hrs)` %<>% as.integer()
+```
+
+```{r}
+IC_tbl %>% filter(N_source == "+ Nitrate") %>% 
+  ggplot(aes(x = `Time (hrs)`, y = Nitrate)) +
+  geom_point(aes(color = ID)) +
+  geom_smooth(method = "lm") +
+  facet_wrap(vars(light)) +
+  ggtitle("Nitrate (µM)")
+
+IC_tbl %>% filter(N_source == "+ Ammonium") %>% 
+  ggplot(aes(x = `Time (hrs)`, y = Ammonium)) +
+  geom_point(aes(color = ID)) +
+  geom_smooth(method = "lm") +
+  facet_wrap(vars(light)) +
+  ggtitle("Ammonium (µM)")
+
+IC_tbl %>% ggplot(aes(x = `Time (hrs)`, y = Formate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(vars(light)) +
+  ggtitle("Formate (µM)")
+```
+

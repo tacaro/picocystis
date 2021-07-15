@@ -25,25 +25,6 @@ solve \space for \space \mu \\
 \downarrow \\
 \mu = \frac{1}{t} \cdot \ln\frac{(F_T - a*F_L)}{(F_0 - a*F_L)}
 $$
-# Load Libraries
-
-```{r}
-library(tidyverse)
-library(readxl)
-```
-
-# Import Data and Constants
-
-```{r}
-iso_data <- read_csv("")
-a = 1 # EDIT: assimilation efficiency
-f_l =  99.99 # EDIT: Labeling strength as 15N frac abundance
-t_d = 4 # labeling time in days 
-nat_abund = 0 # EDIT: Natural abundance of target isotope
-```
-
-# FT calculations
-
 $$
 N_t = N_0 \cdot e^{µt} \\
 \downarrow \\
@@ -51,49 +32,359 @@ N_t = N_0 \cdot e^{µt} \\
 $$
 
 
+# Load Libraries
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(ggsci)
+library(ggdist)
+library(plotly)
+library(latex2exp)
+```
+
+# Import Data and Set Constants
+
+```{r, message=FALSE}
+roi_tbl <- read_tsv("roi_tbl.tsv")
+
+a = 0.5 # EDIT: assimilation efficiency
+f_l =  1 # EDIT: Labeling strength as 15N frac abundance
+t_d = 4 # labeling time in days
+nat_abund_15N = .00364 # EDIT: Natural abundance of target isotope 15N frac abundance
+f_0 = .00364 # EDIT: Initial Isotopic enrichment 15N frac abundance
+```
+
+# FT calculations
+
 Define a function gencalc that calculates growth rate based on assimilation efficiency (a), tracer strength (f_t), initial isotopic enrichment (f_0), label strength (f_l), and incubation time in days (t_d). Returns a growth rate in days.
 ```{r}
-gencalc <- function(a, f_t, f_0, f_l, t) {
+gencalc <- function(a, f_t, f_0, f_l, t_d) {
   case_when(
-    t == 0 ~ NA_real_,
-    TRUE ~ - (1/t)*(log((FT - a*FL)/(F0 - a*FL)))
+    t_d == 0 ~ NA_real_,
+    TRUE ~ - (1/t_d) * (log((f_t - a*f_l)/(f_0 - a*f_l)))
   )
 }
 ```
 
 ```{r}
-iso_data %>% mutate(
-  d_ft = f_t - nat_abund, # isotopic enrichment relative to natural abundance (background)
-  u_d = gencalc(a = a, f_t = d_ft, f_0 = nat_abund, FL = FL, t = t_d), # growth rate in days
-  gen_d = log(2) / u_d # generation time in days
-  
+# Calculate Generation Times
+roi_tbl <- roi_tbl %>% mutate(
+  mu_d = gencalc(a, Ratio_15N_12Cx14N_12C, f_0, f_l, t_d),
+  gen_d = log(2) / mu_d,
 )
+
+# Replace negative values with zeros
+# If a cell is below natural abundance it will have a "negative" growth rate!
+roi_tbl$mu_d[roi_tbl$mu_d < 0] <- 0
+roi_tbl$gen_d[roi_tbl$gen_d < 0] <- 0
+
+# Remove NA containing rows
+roi_tbl <- roi_tbl %>% drop_na(mu_d)
+
+# Calculate mean turnover and gentimes
+roi_tbl <- roi_tbl %>% group_by(N_source, light) %>% 
+  mutate(median_mu_d = median(mu_d),
+         median_gen_d = median(gen_d))
+
+write_tsv(roi_tbl, "roi_tbl_gentimes.tsv")
 ```
 
+
 # Plot
-Plot.
 
 ```{r}
-iso_data %>% ggplot(aes(x = condition, y = gen_d)) +
-  geom_bar(aes(fill = bacterium), stat = "identity") +
-  coord_flip() +
-  scale_fill_viridis_d() +
-  ylab("Generation time (Days)") +
+p_turnover_nh4_light <- roi_tbl %>% filter(N_source == "NH4", light == "light") %>% 
+  ggplot(aes(x = N_source, y = gen_d, color = cell_type)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
+  #facet_wrap(vars(light), scales="free_y") +
+  ylab(TeX("Cell-Specific Generation Time (days)")) +
+  xlab("") +
+  scale_color_aaas() +
+  coord_cartesian(ylim = c(0, 20)) +
+  theme_classic() +
+  theme(axis.title.x = element_blank())
+p_turnover_nh4_light
+```
+
+```{r}
+p_nh4_no3 <- roi_tbl %>%
+  filter(!is.na(gen_d)) %>% 
+  filter(N_source %in% c("no3", "NH4")) %>% 
+  ggplot(aes(x = N_source, y = mu_d, color = cell_type)) + 
+  #facet_wrap(vars(N_source, light), scale = "free_x") +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
+  facet_wrap(vars(light, N_source), scales = "free") +
+  ylab(TeX("Cell Turnover $d^{-1}$")) +
+  scale_color_aaas() +
+  theme_classic()
+p_nh4_no3
+```
+
+```{r}
+p_no_nh4 <- roi_tbl %>%
+  filter(!is.na(gen_d)) %>% 
+  filter(N_source != "NH4") %>% 
+  ggplot(aes(x = N_source, y = mu_d, color = cell_type)) + 
+  #facet_wrap(vars(N_source, light), scale = "free_x") +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(position=position_jitterdodge(jitter.width = 0.1), size = 0.2) +
+  #facet_wrap(vars(light, N_source), scales = "free") +
+  ylab(TeX("Cell Turnover $d^{-1}$")) +
+  scale_color_aaas() +
+  coord_cartesian(ylim = c(0, 0.05)) +
+  theme_classic()
+p_no_nh4
+```
+
+
+```{r}
+roi_tbl %>% filter(cell_type_other == "Picocystis", light == "light") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  ggtitle("Growth under light conditions") +
+  theme_classic()
+```
+
+
+```{r}
+p_no3 <- roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  light == "light",
+  N_source == "no3") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  ggtitle("Growth under light conditions") +
+  theme_classic()
+ggplotly(p_no3)
+```
+
+```{r}
+p_non_nh4 <- roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  light == "light",
+  N_source != "NH4") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  ggtitle("Growth under light conditions") +
+  theme_classic()
+ggplotly(p_non_nh4)
+```
+
+```{r}
+roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  light == "light",
+  N_source != "NH4",
+  N_source != "no3") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  ggtitle("Growth under light conditions") +
   theme_classic()
 ```
 
 
 
+```{r}
+roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  N_source == "gly") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  facet_wrap(vars(light), ncol=1) +
+  ggtitle("Growth with 15N glycine") +
+  theme_classic()
+```
+
+
+```{r}
+roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  N_source == "CN") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  facet_wrap(vars(light), ncol=1) +
+  ggtitle("Growth with 15N CN") +
+  theme_classic()
+```
+
+
+```{r}
+roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  N_source == "TMA") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  facet_wrap(vars(light), ncol=1) +
+  ggtitle("Growth with 15N TMA") +
+  theme_classic()
+```
+
+
+```{r}
+roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  N_source == "HPG") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  facet_wrap(vars(light), ncol=1) +
+  ggtitle("Growth with 15N HPG") +
+  theme_classic()
+```
 
 
 
+```{r}
+roi_tbl %>% filter(
+  cell_type_other == "Picocystis", 
+  N_source == "NH4") %>% 
+  ggplot(aes(x = mu_d, y = N_source)) +
+  geom_boxplot(outlier.shape = NA, width = 0.1) +
+  geom_jitter(height = 0.1, alpha = 0.5, size = 0.4) +
+  facet_wrap(vars(light), ncol=1) +
+  ggtitle("Growth with 15N NH4") +
+  theme_classic()
+```
+
+# Remove inactive cells
+
+```{r}
+# Take the negative control upper limit (2 sigma)
+limit_of_activity <- gencalc(a, .0040436, f_0, f_l, t_d)
 
 
+roi_tbl_active <- roi_tbl %>% mutate(
+  active = case_when(
+    mu_d > limit_of_activity ~ "Active",
+    TRUE ~ "Inactive"
+  )
+)
 
+roi_tbl_active_props <- roi_tbl_active %>% 
+  group_by(N_source, light) %>% 
+  count(active) %>% 
+  mutate(prop = n/sum(n)) %>%
+  select(-n)
 
+roi_tbl_active_props %>% filter(active == "Active") %>% 
+  ggplot(aes(x = N_source, y = prop, fill = light)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_fill_jama() +
+  theme_minimal()
 
+roi_tbl_active %>% filter(active == "Active", N_source != "NH4") %>% 
+  ggplot(aes(x = N_source, y = mu_d, color = cell_type)) +
+  geom_boxplot(outlier.shape = NA) +
+  #geom_jitter(size = 0.2) +
+  facet_wrap(vars(light), scales = "free") +
+  ylab(TeX("Cell Turnover $d^{-1}$")) +
+  scale_color_aaas() +
+  coord_cartesian(ylim = c(0, 0.05)) +
+  theme_classic()
+```
 
+```{r}
+roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other") %>% 
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = light)) + 
+  stat_slab(alpha = 0.3, height = 0.5) +
+  stat_pointinterval(position = position_dodge(width = .4, preserve = "single")) +
+  scale_fill_aaas() +
+  theme_classic()
+```
 
+```{r}
+p_NH4_active_raincloud <- roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active") %>% 
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = light)) + 
+  stat_slab(alpha = 0.6, height = 0.5) +
+  geom_point(y = -.20, size = 10, shape = 124, alpha = 0.3) +
+  stat_pointinterval(y = 0, alpha = 0.5) +
+  facet_wrap(vars(light), ncol = 1, strip.position = "right") +
+  scale_fill_aaas() +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+ggsave(p_NH4_active_raincloud, filename = "NH4_active_raincloud.png", height = 3, width = 4)
+```
 
+```{r}
+p_no3_nh4_active_raincloud <- roi_tbl_active %>% filter(N_source == "no3", cell_type != "Other", active == "Active") %>%
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = light, color = light)) +
+  stat_slab(alpha = 0.6, height = 0.5) +
+  stat_slab(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active", light == "dark"), color = "darkblue", alpha = 0.7, fill = "darkblue") +
+geom_point(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active", light == "dark"), color = "darkblue", y = -.5, size = 10, shape = 124, alpha = 0.3) +
+  stat_pointinterval(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active", light == "dark"), color = "black", alpha = 0.5) +
+  geom_point(y = -.5, size = 10, shape = 124, alpha = 0.3) +
+  stat_pointinterval(alpha = 0.5, color = "black") +
+  facet_wrap(N_source~light, ncol = 1, strip.position = "right") +
+  scale_fill_manual(values = c("orange", "cyan")) +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+p_no3_nh4_active_raincloud
 
+ggsave(p_no3_nh4_active_raincloud, filename = "p_no3_nh4_active_raincloud.png", height = 3, width = 5)
+```
+
+```{r}
+roi_tbl %>% filter(N_source == "no3") %>% 
+  group_by(light) %>% 
+  summarize(med_mu_d = median(mu_d),
+            med_gen_d = median(gen_d))
+```
+
+```{r}
+p_DON_active_raincloud <- roi_tbl_active %>% 
+  filter(N_source %in% c("TMA", "gly", "HPG", "CN"), 
+         cell_type != "Other", 
+         active == "Active") %>% 
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C)) + 
+  stat_slab(aes(color = light, fill = light), 
+            fill = "gray", 
+            alpha = 0.6, 
+            height = 0.5) +
+  geom_point(aes(color = light), 
+             y = -.50, 
+             size = 7, 
+             shape = 124, 
+             alpha = 0.3) +
+  stat_pointinterval(y = 0, alpha = 0.5) +
+  geom_vline(xintercept = .0040436,
+             color = "red",
+             alpha = 0.5) +
+  facet_wrap(N_source~light, 
+             ncol = 1, 
+             strip.position = "right") +
+  scale_color_aaas() +
+  theme_classic() +
+  theme(legend.position = "none",
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
+p_DON_active_raincloud
+ggsave(p_DON_active_raincloud, filename = "p_DON_active_raincloud.png", height = 5, width = 5)
+```
+
+```{r}
+median_gen_mu_d <- roi_tbl %>% 
+  group_by(N_source, light) %>% 
+  summarize(med_gen_d = median(gen_d),
+            med_mu_d = median(mu_d),
+            mean_gen_d = mean(gen_d)) %>% 
+  write_tsv(file = "median_gen_mu_d.tsv")
+
+```
 
