@@ -12,6 +12,7 @@ from skimage import transform
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+from matplotlib import colors
 
 parser = argparse.ArgumentParser(description='nanosims processing port')
 
@@ -56,7 +57,7 @@ def apply_filter(img, filt_method, sigma):
 def rough_plot(img):
     for frame in img.frame.values:
         for specie in img.species.values:
-            plt.imshow(img.loc[specie, frame], cmap='gray')
+            plt.imshow(img.loc[specie, frame], cmap='gray', interpolation='none')
             plt.gray()
             plt.axis('off')
             plt.colorbar()
@@ -66,7 +67,7 @@ def rough_plot(img):
 def save_plot(img):
     for frame in img.frame.values:
         for specie in img.species.values:
-            plt.imshow(img.loc[specie, frame], cmap='gray')
+            plt.imshow(img.loc[specie, frame], cmap='gray', interpolation='none')
             plt.gray()
             plt.axis('off')
             plt.colorbar()
@@ -171,9 +172,31 @@ try:
     green_objects = measure.label(green_rois, return_num=True)
     blue_objects = measure.label(blue_rois, return_num=True)
 
-    num_objects = red_objects[1] + green_objects[1] + blue_objects[1]
+    # make a nice annotated image so rois are numbered to correspond to future stats_table
+    obj = np.where(red_objects[0] > 0, red_objects[0], 0) + \
+          np.where(green_objects[0] > 0, green_objects[0] + red_objects[1], 0) + \
+          np.where(blue_objects[0] > 0, blue_objects[0] + red_objects[1] + green_objects[1], 0)
+
+    cmap, norm = colors.from_levels_and_colors(levels=np.unique(obj), extend='max',
+                                               colors=np.hstack((np.repeat('black', 1),
+                                                                 np.repeat('red', red_objects[1]),
+                                                                 np.repeat('green', green_objects[1]),
+                                                                 np.repeat('blue', blue_objects[1]))))
+    plt.imshow(obj, cmap=cmap, norm=norm, interpolation='none')
+    for region in measure.regionprops(measure.label(red_rois)):
+        ry, rx = region.centroid
+        plt.text(rx, ry, s=region.label, ha='center', va='center', bbox=dict(fc='white', ec='none', pad=2))
+    for region in measure.regionprops(measure.label(blue_rois)):
+        ry, rx = region.centroid
+        plt.text(rx, ry, s=region.label, ha='center', va='center', bbox=dict(fc='white', ec='none', pad=2))
+    for region in measure.regionprops(measure.label(blue_rois)):
+        ry, rx = region.centroid
+        plt.text(rx, ry, s=region.label, ha='center', va='center', bbox=dict(fc='white', ec='none', pad=2))
+    plt.savefig(fname=args.output + "_roi_table.png")
+    plt.cla()
 
     stats_table = list()
+
 except OSError:
     if not args.whole_image:
         print('No ROI, saving files for you so you can draw them pls pls ^_^')
@@ -188,7 +211,7 @@ for frame in range(aligned_image.data.shape[1]):
     if args.whole_image:
         ratio_image = comp1/(comp1 + comp2)
         ratio_image = np.nan_to_num(ratio_image)
-        plt.imshow(ratio_image)
+        plt.imshow(ratio_image, interpolation='none')
         plt.axis('off')
         cbar = plt.colorbar()
         cbar.set_label("Fraction (per ROI)")
@@ -199,9 +222,12 @@ for frame in range(aligned_image.data.shape[1]):
         plt.show()
 
     if args.roi:
-        annotated_image, stats_table = parse_ROIs(objects=red_objects, grp_col='red', c1=comp1, c2=comp2,
-                                                  im=aligned_image.loc[:, frame, :, :],
-                                                  annotated_im=annotated_image, stats=stats_table)
+        try:
+            annotated_image, stats_table = parse_ROIs(objects=red_objects, grp_col='red', c1=comp1, c2=comp2,
+                                                      im=aligned_image.loc[:, frame, :, :],
+                                                      annotated_im=annotated_image, stats=stats_table)
+        except TypeError:
+            print("No red, continuing")
         try:
             annotated_image, stats_table = parse_ROIs(objects=green_objects, grp_col='green', c1=comp1, c2=comp2,
                                                       im=aligned_image.loc[:, frame, :, :],
@@ -226,7 +252,7 @@ for frame in range(aligned_image.data.shape[1]):
                            "_ratio" + re.sub(" ", "_", args.compare1) +"-x-" + re.sub(" ", "_", args.compare2) +
                            ".tsv", sep="\t", index=False)
 
-        plt.imshow(annotated_image)
+        plt.imshow(annotated_image, interpolation='none')
         plt.gray()
         plt.axis('off')
         cbar = plt.colorbar()
