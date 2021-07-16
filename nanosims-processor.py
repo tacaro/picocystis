@@ -214,14 +214,14 @@ for frame in range(aligned_image.data.shape[1]):
         ratio_image = comp1/(comp1 + comp2)
         ratio_image = np.nan_to_num(ratio_image)
 
-        plt.clf()
+        plt.cla()
         plt.imshow(ratio_image, interpolation='none')
         plt.axis('off')
         plt.colorbar().set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
                   sims.utils.format_species(args.compare2) + ")")
         plt.savefig(fname=args.output + "_whole_f" + str(frame) +
-                          "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
+                          "_ratio" + re.sub(" ", "_", args.compare1) +"-x-"+ re.sub(" ", "_", args.compare2) + ".png")
         if not args.no_show:
             plt.show()
 
@@ -256,8 +256,7 @@ for frame in range(aligned_image.data.shape[1]):
                            "_ratio" + re.sub(" ", "_", args.compare1) +"-x-" + re.sub(" ", "_", args.compare2) +
                            ".tsv", sep="\t", index=False)
         plt.clf()
-        plt.imshow(annotated_image, interpolation='none')
-        plt.gray()
+        plt.imshow(annotated_image, interpolation='none', cmap='gray')
         plt.axis('off')
         plt.colorbar().set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
