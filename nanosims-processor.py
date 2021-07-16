@@ -39,6 +39,8 @@ parser.add_argument('-c', '--compare1', metavar='STRING', default='15N 12C',
 parser.add_argument('-C', '--compare2', metavar='STRING', default='14N 12C',
                     help='Comparand element or trolley to be summed with --compare1 for denominator \
                     [default: "14N 12C"]')
+parser.add_argument('-n', '--no_show', action='store_true',
+                    help='Add this to not show plots to screen, only save (e.g., you are processing a batch of files)')
 
 args = parser.parse_args()
 
@@ -51,7 +53,7 @@ def apply_filter(img, filt_method, sigma):
     if filt_method == 'median':
         for frame in img.frame.values:
             for specie in img.species.values:
-                img.loc[specie, frame, :, :] = ndimage.median_filter(img.loc[specie, frame].data, size=sigma)
+                img.loc[specie, frame, :, :] = ndimage.median_filter(img.loc[specie, frame].data, size=int(sigma))
     return img
 
 def rough_plot(img):
@@ -67,6 +69,7 @@ def rough_plot(img):
 def save_plot(img):
     for frame in img.frame.values:
         for specie in img.species.values:
+            plt.cla()
             plt.imshow(img.loc[specie, frame], cmap='gray', interpolation='none')
             plt.gray()
             plt.axis('off')
@@ -138,13 +141,10 @@ aligned_image = aligned_image.drop_isel(x=[0, -1], y=[0, -1])
 
 if args.frame:
     aligned_image = aligned_image.loc[:, args.frame,: , :]
-
 if args.filter_method:
-    aligned_image = apply_filter(img=aligned_image, filt_method=args.filter_method, sigma=1)
-
+    aligned_image = apply_filter(img=aligned_image, filt_method=args.filter_method, sigma=args.sigma)
 if args.output is None:
     args.output = re.sub(".im", "", args.input)
-
 if args.rough:
     rough_plot(aligned_image)
     exit()
@@ -152,14 +152,13 @@ if args.rough:
 try:
     rois = imageio.imread(args.roi, pilmode='RGB')
 
-    # image is in center?
     # hack becasue DPI is different between saved png and imported roi
     rois = get_image_from_raw_rois(roi=rois, im=aligned_image)
 
     # set up blank annotated image to be drawn upon
     annotated_image = np.zeros(rois.shape[0:2])
 
-    # 3 groups of rois
+    # 3 groups of rois - red, green, blue
     red_rois = rois[:,:,0]-rois[:,:,2]
     red_rois = 1*(red_rois > 200)
     green_rois = rois[:,:,1]-rois[:,:,2]
@@ -182,6 +181,7 @@ try:
                                                                  np.repeat('red', red_objects[1]),
                                                                  np.repeat('green', green_objects[1]),
                                                                  np.repeat('blue', blue_objects[1]))))
+
     plt.imshow(obj, cmap=cmap, norm=norm, interpolation='none')
     for region in measure.regionprops(measure.label(red_rois)):
         ry, rx = region.centroid
@@ -193,13 +193,15 @@ try:
         ry, rx = region.centroid
         plt.text(rx, ry, s=region.label, ha='center', va='center', bbox=dict(fc='white', ec='none', pad=2))
     plt.savefig(fname=args.output + "_roi_table.png")
+    if not args.no_show:
+        plt.show()
     plt.cla()
 
     stats_table = list()
 
 except OSError:
     if not args.whole_image:
-        print('No ROI, saving files for you so you can draw them pls pls ^_^')
+        print('No ROI, saving pngs for each channel so you can use for making ROIs (or rerun with -r)')
         save_plot(aligned_image)
 
 
@@ -211,15 +213,17 @@ for frame in range(aligned_image.data.shape[1]):
     if args.whole_image:
         ratio_image = comp1/(comp1 + comp2)
         ratio_image = np.nan_to_num(ratio_image)
+
+        plt.clf()
         plt.imshow(ratio_image, interpolation='none')
         plt.axis('off')
-        cbar = plt.colorbar()
-        cbar.set_label("Fraction (per ROI)")
+        plt.colorbar().set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
                   sims.utils.format_species(args.compare2) + ")")
         plt.savefig(fname=args.output + "_whole_f" + str(frame) +
                           "_ratio" + args.compare1 +"-x-"+ args.compare2 + ".png")
-        plt.show()
+        if not args.no_show:
+            plt.show()
 
     if args.roi:
         try:
@@ -251,17 +255,16 @@ for frame in range(aligned_image.data.shape[1]):
         stats_table.to_csv(args.output + "_f0" +
                            "_ratio" + re.sub(" ", "_", args.compare1) +"-x-" + re.sub(" ", "_", args.compare2) +
                            ".tsv", sep="\t", index=False)
-
+        plt.clf()
         plt.imshow(annotated_image, interpolation='none')
         plt.gray()
         plt.axis('off')
-        cbar = plt.colorbar()
-        cbar.set_label("Fraction (per ROI)")
+        plt.colorbar().set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
                   sims.utils.format_species(args.compare2) + ")")
         plt.savefig(fname=args.output + "_f" + str(frame) +
                           "_ratio" + re.sub(" ", "_", args.compare1) +"-x-"+ re.sub(" ", "_", args.compare2) + ".png")
-        plt.show()
-
+        if not args.no_show:
+            plt.show()
 
 
