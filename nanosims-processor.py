@@ -14,33 +14,40 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
-parser = argparse.ArgumentParser(description='nanosims processing port')
+parser = argparse.ArgumentParser(description = 'Tool for parsing Cameca NanoSIMS .im files to produce ratios. \
+                                 Basic usage is to read a .im file, and produce single-channel PNGs and/or ratios of \
+                                 isotope_1 / (isotope_1 + isotope_2). Also can read in a .png as a mask for ROIs.')
+group1 = parser.add_argument_group('BASIC OPTIONS', '')
+group2 = parser.add_argument_group('PLOTTING OPTIONS', '')
+group3 = parser.add_argument_group('ROI OPTIONS', '')
 
-parser.add_argument('-i', '--input', metavar='PATH',
-                    default='GB21_L2_NH4_light_chain1_1.im',
+group1.add_argument('-i', '--input', metavar='PATH', required=True,
                     dest='input', help='File for input (a .im file)')
-parser.add_argument('-o', '--output', metavar='PATH',
+group1.add_argument('-o', '--output', metavar='PATH',
                     default=None, help='Prefix for output [default: --input without the .im ending]')
-parser.add_argument('-f', '--frame', metavar='INT', type=int, default=None,
-                    help='Frame index (e.g., "0" would be the first frame" to focus, \
-                    default behavior is to loop through all [default: None]')
-parser.add_argument('-F', '--filter_method', metavar='STRING', default=None,
-                    help='Add a filter step, currently confined to one of "gaussian", "median" [default: None]')
-parser.add_argument('-s', '--sigma', metavar='FLOAT', type=float, default=1.0,
-                    help='Parameter for filtration (sigma for gaussian, size for median) [default: 1.0]')
-parser.add_argument('--rough', action='store_true',
-                    help='Only rough plot, then exit')
-parser.add_argument('-r', '--roi', metavar='PATH', default=None,
-                    help='Path to find manually drawn ROI file (mask) [default: rois.png]')
-parser.add_argument('-w', '--whole_image', action='store_true',
-                    help='no ROI, full image')
-parser.add_argument('-c', '--compare1', metavar='STRING', default='15N 12C',
-                    help='Focal element or trolley to be the numerator [default: "15N 12C"]')
-parser.add_argument('-C', '--compare2', metavar='STRING', default='14N 12C',
+group1.add_argument('-c', '--compare1', metavar='"STRING"', default='15N 12C',
+                    help='Focal element or trolley to be the numerator (use quotes if has spaces) [default: "15N 12C"]')
+group1.add_argument('-C', '--compare2', metavar='"STRING"', default='14N 12C',
                     help='Comparand element or trolley to be summed with --compare1 for denominator \
                     [default: "14N 12C"]')
-parser.add_argument('-n', '--no_show', action='store_true',
-                    help='Add this to not show plots to screen, only save (e.g., you are processing a batch of files)')
+group1.add_argument('-f', '--frame', metavar='INT', type=int, default=None,
+                    help='Frame index (e.g., "0" would be the first frame) to focus, \
+                    default behavior is to loop through all [default: None]')
+group1.add_argument('-F', '--filter_method', metavar='STRING', default=None,
+                    help='Add a filter step, currently confined to one of "gaussian", "median" [default: None]')
+group1.add_argument('-s', '--sigma', metavar='FLOAT', type=float, default=1.0,
+                    help='Parameter for filtration (sigma for gaussian, size for median) [default: 1.0]')
+group2.add_argument('--rough', action='store_true',
+                    help='Only rough plot, then exit [default: False]')
+group2.add_argument('-w', '--whole_image', action='store_true',
+                    help='Calculate ratio of specified channels for the full image (all pixels)')
+group2.add_argument('-n', '--no_show', action='store_true',
+                    help='Add this to not show plots to your screen, only save. Useful when batch processing')
+group3.add_argument('-r', '--roi', metavar='PATH', default=None,
+                    help='Path to corresponding manually drawn ROI file (mask) [default: None]')
+group3.add_argument('--count_stat', metavar='STRING', default='mean',
+                    help='Method for aggregating pixel values in each ROI to report in the summary table. \
+                    Does not affect ratios. Current options: mean, sum [default: mean]')
 
 args = parser.parse_args()
 
@@ -120,7 +127,10 @@ def parse_ROIs(objects, grp_col, c1, c2, annotated_im, im, stats):
         counts1 = sum([c1.data[x, y] for x, y in pts])
         counts2 = sum([c2.data[x, y] for x, y in pts])
 
-        all_counts = [x for x in np.array([im.data[:, x, y] for x, y in pts]).sum(axis=0)]
+        if args.count_stat == 'mean':
+            all_counts = [x for x in np.array([im.data[:, x, y] for x, y in pts]).sum(axis=0)]
+        elif args.count_stat == 'sum':
+            all_counts = [x for x in np.array([im.data[:, x, y] for x, y in pts]).mean(axis=0)]
 
         rat_im = counts1/(counts1 + counts2)
         annotated_im[obj_x, obj_y] = rat_im
@@ -132,15 +142,25 @@ def parse_ROIs(objects, grp_col, c1, c2, annotated_im, im, stats):
         stats.append(obj_stats)
     return annotated_im, stats
 
-
+### BODY ###
 image = sims.SIMS(args.input)
 aligned_image, shifts = sims.utils.align(image)
+
+if args.compare1 not in aligned_image.species:
+    print("Your --compare1 value is not in the .im file? Did you put an underscore in? Available names:\n" +
+          ", ".join(aligned_image.species.values))
+    exit()
+if args.compare2 not in aligned_image.species:
+    print("Your --compare2 value is not in the .im file? Did you put an underscore in? Available names:\n" +
+          ", ".join(aligned_image.species.values))
+    exit()
 
 # remove 1px border on all sides because Cameca
 aligned_image = aligned_image.drop_isel(x=[0, -1], y=[0, -1])
 
-if args.frame:
-    aligned_image = aligned_image.loc[:, args.frame,: , :]
+if args.frame is not None:
+    print('subsetting to frame ' + str(args.frame))
+    aligned_image = aligned_image.loc[:, [args.frame], : , :]
 if args.filter_method:
     aligned_image = apply_filter(img=aligned_image, filt_method=args.filter_method, sigma=args.sigma)
 if args.output is None:
@@ -215,7 +235,7 @@ for frame in range(aligned_image.data.shape[1]):
         ratio_image = np.nan_to_num(ratio_image)
 
         plt.cla()
-        plt.imshow(ratio_image, interpolation='none')
+        plt.imshow(ratio_image, interpolation='none', cmap='cividis')
         plt.axis('off')
         plt.colorbar().set_label("Fraction (per ROI)")
         plt.title(sims.utils.format_species(args.compare1) + " / (" + sims.utils.format_species(args.compare1)+" + "+
