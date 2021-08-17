@@ -56,10 +56,16 @@ Append `_ROI.png` to your `image` name for ease of processing!
     ├── ...
     └── run2/
 ```
-Great, now `nanosims-processorpy` has everything it needs to generate channel-specific images.
+Great, now `nanosims-processor.py` has everything it needs to generate channel-specific images.
 
 ### 3. Generate channel-specific images
 
+Now we can run `nanosims-processor.py` either individually for each image, or we can loop it over a series of images using `loop-nanosims-processor.sh`.
+
+```
+nanosims-processor.py --roi image1_ROI.png -i image1.im -o image1;
+```
+Returns:
 ```
 ~/
 ├── project_directory/ # nanoSIMS data directory
@@ -79,34 +85,6 @@ Great, now `nanosims-processorpy` has everything it needs to generate channel-sp
     ├── ...
     └── run2/
 ```
-
-```
-~/
-├── project_directory/ # nanoSIMS data directory
-    ├── run1/
-    |   ├── image1/
-    |   |   ├── image1_12C.png
-    |   |   ├── image1_13C.png
-    |   |   ├── image1_14N12C.png
-    |   |   ├── image1_15N12C.png
-    |   |   ├── image1_31P.png
-    |   |   ├── image1_32S.png
-    |   |   ├── image1_34S.png
-    |   |   ├── image1_SE.png
-    |   |   └── image1_ROI.png
-    |   ├── ...
-    |   └── image2/
-    ├── ...
-    └── run2/
-```
-
-### 4. Collecting .tsv output
-
-If you prefer, you can iteratively collect all of the .tsv files into a folder called `roi_data` using a shell one-liner like the one found in `extract_tsv.sh`. In short, this code searches two directories down `**/**/` for files ending with `.tsv`.
-```
-n | cp -i **/**/*.tsv roi_data/
-```
-
 In the case of the Picocystis data, expanding out the `NH4_light_chain10A_1` image, we see the final result:
 ```
 picocystis/
@@ -135,6 +113,11 @@ picocystis/
     ├── NO3_light/
     ├── ...
     └── gly_dark
+```
+### 4. Collecting .tsv output
+Now we have lots of `.tsv` files, each corresponding to a single image, containing ROI-specific data. We can work with these individually or, if we prefer, iteratively collect all of the .tsv files into a folder called `roi_data` using a shell one-liner like the one found in `extract_tsv.sh`. In short, this code searches two directories down `**/**/` for files ending with `.tsv`.
+```
+n | cp -i **/**/*.tsv roi_data/
 ```
 
 # Handoff to R
