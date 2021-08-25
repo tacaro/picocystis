@@ -41,6 +41,7 @@ library(ggsci)
 library(ggdist)
 library(plotly)
 library(latex2exp)
+library(ggtext)
 ```
 
 # Import Data and Set Constants
@@ -319,15 +320,37 @@ ggsave(p_NH4_active_raincloud, filename = "NH4_active_raincloud.png", height = 3
 ```
 
 ```{r}
-p_no3_nh4_active_raincloud <- roi_tbl_active %>% filter(N_source == "no3", cell_type != "Other", active == "Active") %>%
-  ggplot(aes(x = Ratio_15N_12Cx14N_12C, fill = light, color = light)) +
+p_no3_nh4_active_raincloud <- roi_tbl_active %>% 
+  filter(N_source == "no3", cell_type != "Other", active == "Active") %>%
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C, 
+             fill = light, 
+             color = light)) +
   stat_slab(alpha = 0.6, height = 0.5) +
-  stat_slab(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active", light == "dark"), color = "darkblue", alpha = 0.7, fill = "darkblue") +
-geom_point(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active", light == "dark"), color = "darkblue", y = -.5, size = 10, shape = 124, alpha = 0.3) +
-  stat_pointinterval(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Other", active == "Active", light == "dark"), color = "black", alpha = 0.5) +
-  geom_point(y = -.5, size = 10, shape = 124, alpha = 0.3) +
-  stat_pointinterval(alpha = 0.5, color = "black") +
-  facet_wrap(N_source~light, ncol = 1, strip.position = "right") +
+  stat_slab(data = roi_tbl_active %>% filter(N_source == "NH4", 
+                                             cell_type != "Other", 
+                                             active == "Active",
+                                             light == "dark"), 
+            color = "darkblue", alpha = 0.7, fill = "darkblue") +
+  geom_point(data = roi_tbl_active %>% filter(N_source == "NH4", 
+                                            cell_type != "Other", 
+                                            active == "Active", 
+                                            light == "dark"), 
+           color = "darkblue", y = -.5, size = 10, shape = 124, alpha = 0.3) +
+  stat_pointinterval(data = roi_tbl_active %>% filter(N_source == "NH4", 
+                                                      cell_type != "Other", 
+                                                      active == "Active", 
+                                                      light == "dark"), 
+                     color = "black", 
+                     alpha = 0.5) +
+  geom_point(y = -.5, 
+             size = 10, 
+             shape = 124, 
+             alpha = 0.3) +
+  stat_pointinterval(alpha = 0.5, 
+                     color = "black") +
+  facet_wrap(N_source~light, 
+             ncol = 1, 
+             strip.position = "right") +
   scale_fill_manual(values = c("orange", "cyan")) +
   theme_classic() +
   theme(legend.position = "none",
@@ -336,8 +359,62 @@ geom_point(data = roi_tbl_active %>% filter(N_source == "NH4", cell_type != "Oth
         axis.text.y = element_blank())
 p_no3_nh4_active_raincloud
 
-ggsave(p_no3_nh4_active_raincloud, filename = "p_no3_nh4_active_raincloud.png", height = 3, width = 5)
+#ggsave(p_no3_nh4_active_raincloud, filename = "p_no3_nh4_active_raincloud.png", height = 3, width = 5)
 ```
+
+```{r}
+
+color_scale = c("#003049", "#f77f00")
+p_nh4_no3 <- roi_tbl_active %>% filter(N_source %in% c("NH4", "no3"),
+                                       active == "Active") %>% 
+  ggplot(aes(x = Ratio_15N_12Cx14N_12C,
+             y = N_source,
+             fill = light,
+             color = light)) +
+  stat_halfeye(data = roi_tbl_active %>% filter(N_source == "no3"),
+               position = "dodge", 
+               color = "black",
+               scale = 1) +
+  stat_halfeye(data = roi_tbl_active %>% filter(N_source == "NH4"),
+               position = "dodge", 
+               color = "black",
+               scale = 1) +
+  geom_point(
+    shape = 124,
+    size = 5,
+    alpha = 0.5,
+    position = position_nudge(y = -.3)) +
+  facet_wrap(N_source~light, ncol = 1, scale = "free_y") +
+  scale_fill_manual(values = color_scale) +
+  scale_color_manual(values = color_scale) +
+  scale_x_log10() +
+  annotation_logticks(sides = "b") +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    panel.grid = element_line(size = 0.2, color = "#ced4da"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    axis.title.x = element_markdown(size = 8.2, margin=margin(t=8)),
+    axis.title.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    plot.caption = element_text(size = 7.5, color="#495057"),
+    plot.title.position = "plot",
+    plot.title = element_text(face = "bold", size = 13),
+    plot.subtitle = element_text(size = 8),
+    plot.margin = unit(c(.5, .5, .5, .5), "cm")) +
+  labs(x = "15N / 14N")
+p_nh4_no3
+
+ggsave("nh4LvD.png", p_nh4_no3, width = 4, height = 5, dpi = 300)
+```
+
+
 
 ```{r}
 roi_tbl %>% filter(N_source == "no3") %>% 
